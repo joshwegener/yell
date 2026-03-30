@@ -232,6 +232,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         try fileManager.moveItem(at: temporaryURL, to: destinationURL)
     }
 
+    private func stagedDownloadedModelURL(for file: String) -> URL {
+        userModelDirectoryURL().appendingPathComponent("\(file).download")
+    }
+
+    private func persistDownloadedModelTemporarily(from temporaryURL: URL, for file: String) throws -> URL {
+        let fileManager = FileManager.default
+        let stagedURL = stagedDownloadedModelURL(for: file)
+        try fileManager.createDirectory(at: userModelDirectoryURL(), withIntermediateDirectories: true)
+        if fileManager.fileExists(atPath: stagedURL.path) {
+            try fileManager.removeItem(at: stagedURL)
+        }
+        try fileManager.moveItem(at: temporaryURL, to: stagedURL)
+        return stagedURL
+    }
+
+    private func removeDownloadedModelTemporarily(at stagedURL: URL) {
+        try? FileManager.default.removeItem(at: stagedURL)
+    }
+
     private func discardInvalidDownloadedModel(file: String) {
         guard let path = downloadedModelPath(for: file) else { return }
         try? FileManager.default.removeItem(atPath: path)
@@ -325,38 +344,48 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         URLSession.shared.downloadTask(with: url) { [weak self] tmpURL, response, error in
             guard let self else { return }
-            DispatchQueue.main.async {
-                let httpStatus = (response as? HTTPURLResponse)?.statusCode
-                guard error == nil, let tmpURL, httpStatus == 200 else {
+            let httpStatus = (response as? HTTPURLResponse)?.statusCode
+            guard error == nil, let tmpURL, httpStatus == 200 else {
+                DispatchQueue.main.async {
                     self.endModelOperation(selectedFile: previousFile)
                     let details = httpStatus.map { "Server responded with HTTP \($0)." }
                     self.showModelDownloadFailedAlert(file: file, details: details)
-                    return
                 }
+                return
+            }
 
-                let home = FileManager.default.homeDirectoryForCurrentUser.path
-                let destDir = "\(home)/.yell/models"
-                let dest = URL(fileURLWithPath: "\(destDir)/\(file)")
-
-                do {
-                    try FileManager.default.createDirectory(atPath: destDir, withIntermediateDirectories: true)
-                    if FileManager.default.fileExists(atPath: dest.path) {
-                        try FileManager.default.removeItem(at: dest)
-                    }
-                    try FileManager.default.moveItem(at: tmpURL, to: dest)
-                } catch {
+            let stagedURL: URL
+            do {
+                stagedURL = try self.persistDownloadedModelTemporarily(from: tmpURL, for: file)
+            } catch {
+                DispatchQueue.main.async {
                     self.endModelOperation(selectedFile: previousFile)
                     self.showModelDownloadFailedAlert(file: file, details: error.localizedDescription)
-                    return
                 }
+                return
+            }
 
-                guard Transcriber.canLoadModel(atPath: dest.path) else {
-                    self.discardInvalidDownloadedModel(file: file)
+            guard Transcriber.canLoadModel(atPath: stagedURL.path) else {
+                self.removeDownloadedModelTemporarily(at: stagedURL)
+                DispatchQueue.main.async {
                     self.endModelOperation(selectedFile: previousFile)
                     self.showInvalidDownloadedModelAlert(file: file)
-                    return
                 }
+                return
+            }
 
+            do {
+                try self.installDownloadedModel(from: stagedURL, to: self.userModelURL(for: file))
+            } catch {
+                self.removeDownloadedModelTemporarily(at: stagedURL)
+                DispatchQueue.main.async {
+                    self.endModelOperation(selectedFile: previousFile)
+                    self.showModelDownloadFailedAlert(file: file, details: error.localizedDescription)
+                }
+                return
+            }
+
+            DispatchQueue.main.async {
                 self.switchModel(to: file, selecting: menuItem, previousFile: previousFile, beginOperation: false)
             }
         }.resume()
