@@ -2,10 +2,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/model-checksums.sh"
+MODEL_CHECKSUMS_FILE="${MODEL_CHECKSUMS_FILE:-$SCRIPT_DIR/model-checksums.sh}"
+source "$MODEL_CHECKSUMS_FILE"
 
-MODEL_DIR="$HOME/.yell/models"
-BASE_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
+MODEL_DIR="${MODEL_DIR:-$HOME/.yell/models}"
+BASE_URL="${BASE_URL:-https://huggingface.co/ggerganov/whisper.cpp/resolve/main}"
+CURL_BIN="${CURL_BIN:-curl}"
 DEFAULT_MODELS=(
     "ggml-tiny.en.bin"
     "ggml-base.en.bin"
@@ -46,7 +48,7 @@ download_if_missing() {
     if [ -t 2 ]; then
         curl_progress="--progress-bar"
     fi
-    curl -fL --retry 3 "$curl_progress" -o "$tmp_path" "$BASE_URL/$name"
+    "$CURL_BIN" -fL --retry 3 "$curl_progress" -o "$tmp_path" "$BASE_URL/$name"
     if ! model_checksum_matches "$tmp_path" "$name"; then
         rm -f "$tmp_path"
         echo "$name failed checksum validation after download (expected $expected_checksum)." >&2
