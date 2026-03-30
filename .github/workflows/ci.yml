@@ -23,6 +23,9 @@ jobs:
       - name: Install CMake
         run: command -v cmake >/dev/null || brew install cmake
 
+      - name: Run script regressions
+        run: ./tests/run.sh
+
       - name: Download bundled Whisper model
         run: ./download-model.sh ggml-tiny.en.bin
 
