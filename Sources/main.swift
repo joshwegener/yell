@@ -1,8 +1,6 @@
 import AppKit
 
-// Prevent multiple instances
-let bundleID = Bundle.main.bundleIdentifier ?? "com.yell.app"
-if NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).count > 1 {
+guard let singleInstanceLock = SingleInstanceLock() else {
     exit(0)
 }
 
@@ -10,4 +8,6 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory) // No Dock icon
 let delegate = AppDelegate()
 app.delegate = delegate
-app.run()
+withExtendedLifetime(singleInstanceLock) {
+    app.run()
+}
