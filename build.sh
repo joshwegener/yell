@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/model-checksums.sh"
+
 APP_NAME="Yell"
 BUILD_DIR="build"
 WHISPER_DIR="vendor/whisper.cpp"
@@ -121,6 +124,10 @@ cp "$BUILD_DIR/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 # Bundle tiny.en model
 TINY_MODEL="$HOME/.yell/models/ggml-tiny.en.bin"
 if [ -f "$TINY_MODEL" ]; then
+    if ! model_checksum_matches "$TINY_MODEL" "ggml-tiny.en.bin"; then
+        echo "Invalid ggml-tiny.en.bin checksum at $TINY_MODEL — run ./download-model.sh ggml-tiny.en.bin" >&2
+        exit 1
+    fi
     echo "Bundling ggml-tiny.en.bin..."
     cp "$TINY_MODEL" "$APP_BUNDLE/Contents/Resources/ggml-tiny.en.bin"
 else
